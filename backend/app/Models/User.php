@@ -41,4 +41,12 @@ class User extends Authenticatable
         'email_verified_at' => 'datetime',
         'password' => 'hashed', // Assure que le mot de passe est toujours haché
     ];
+
+    /**
+     * Relation avec les todos de l'utilisateur
+     */
+    public function todos()
+    {
+        return $this->hasMany(Todo::class);
+    }
 }
