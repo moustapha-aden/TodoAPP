@@ -6,8 +6,18 @@ import Login from './screens/Login';
 import Home from './screens/Home';
 import Profile from './screens/Profile';
 import EditProfile from './screens/EditProfile';
+import * as Notifications from 'expo-notifications';
 
 const Stack = createNativeStackNavigator();
+
+// Configuration des notifications
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 export default function App() {
   return (

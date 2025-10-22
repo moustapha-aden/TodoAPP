@@ -16,6 +16,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as Notifications from 'expo-notifications';
 
 const Home = ({ navigation }) => {
   const BASE_URL =
@@ -40,10 +41,19 @@ const Home = ({ navigation }) => {
   const [todoPriority, setTodoPriority] = useState('medium');
   const [todoDueDate, setTodoDueDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   useEffect(() => {
     loadUserData();
+    requestNotificationPermissions();
   }, []);
+
+  const requestNotificationPermissions = async () => {
+    const { status } = await Notifications.requestPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission refusée', 'Les notifications sont nécessaires pour les rappels de tâches.');
+    }
+  };
 
   useEffect(() => {
     if (user && token) {
@@ -161,6 +171,28 @@ const Home = ({ navigation }) => {
     setTodoPriority('medium');
     setTodoDueDate(new Date());
     setShowDatePicker(false);
+    setShowTimePicker(false);
+  };
+
+  const scheduleNotification = async (todo) => {
+    try {
+      const notificationId = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '📝 Rappel Todo',
+          body: `${todo.title}${todo.description ? ' - ' + todo.description : ''}`,
+          data: { todoId: todo.id },
+        },
+        trigger: {
+          date: new Date(todo.due_date),
+        },
+      });
+      
+      console.log('Notification programmée:', notificationId);
+      return notificationId;
+    } catch (error) {
+      console.error('Erreur programmation notification:', error);
+      return null;
+    }
   };
 
   const saveTodo = async () => {
@@ -174,7 +206,7 @@ const Home = ({ navigation }) => {
         title: todoTitle.trim(),
         description: todoDescription.trim(),
         priority: todoPriority,
-        due_date: todoDueDate.toISOString().split('T')[0],
+        due_date: todoDueDate.toISOString(),
       };
 
       const url = editingTodo 
@@ -195,6 +227,12 @@ const Home = ({ navigation }) => {
 
       if (response.ok) {
         const data = await response.json();
+        
+        // Programmer une notification si une date/heure est définie
+        if (todoData.due_date) {
+          await scheduleNotification(data.todo);
+        }
+        
         Alert.alert('Succès', data.message);
         closeModal();
         loadTodos();
@@ -284,10 +322,16 @@ const Home = ({ navigation }) => {
     }
   };
 
-  const formatDate = (dateString) => {
+  const formatDateTime = (dateString) => {
     if (!dateString) return '';
     const date = new Date(dateString);
-    return date.toLocaleDateString('fr-FR');
+    return date.toLocaleString('fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   };
 
   const renderTodo = ({ item }) => (
@@ -328,7 +372,7 @@ const Home = ({ navigation }) => {
             
             {item.due_date && (
               <Text style={styles.dueDate}>
-                📅 {formatDate(item.due_date)}
+                ⏰ {formatDateTime(item.due_date)}
               </Text>
             )}
           </View>
@@ -469,14 +513,25 @@ const Home = ({ navigation }) => {
               </View>
     </View>
             
-            <TouchableOpacity
-              style={styles.dateButton}
-              onPress={() => setShowDatePicker(true)}
-            >
-              <Text style={styles.dateButtonText}>
-                📅 Date d'échéance: {todoDueDate.toLocaleDateString('fr-FR')}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.dateTimeContainer}>
+              <TouchableOpacity
+                style={styles.dateTimeButton}
+                onPress={() => setShowDatePicker(true)}
+              >
+                <Text style={styles.dateTimeButtonText}>
+                  📅 {todoDueDate.toLocaleDateString('fr-FR')}
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.dateTimeButton}
+                onPress={() => setShowTimePicker(true)}
+              >
+                <Text style={styles.dateTimeButtonText}>
+                  ⏰ {todoDueDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              </TouchableOpacity>
+            </View>
             
             {showDatePicker && (
               <DateTimePicker
@@ -485,8 +540,25 @@ const Home = ({ navigation }) => {
                 display="default"
                 onChange={(event, selectedDate) => {
                   setShowDatePicker(false);
-                  if (selectedDate) {
+                  if (event.type === 'set' && selectedDate) {
                     setTodoDueDate(selectedDate);
+                  }
+                }}
+              />
+            )}
+            
+            {showTimePicker && (
+              <DateTimePicker
+                value={todoDueDate}
+                mode="time"
+                display="default"
+                onChange={(event, selectedTime) => {
+                  setShowTimePicker(false);
+                  if (event.type === 'set' && selectedTime) {
+                    const newDate = new Date(todoDueDate);
+                    newDate.setHours(selectedTime.getHours());
+                    newDate.setMinutes(selectedTime.getMinutes());
+                    setTodoDueDate(newDate);
                   }
                 }}
               />
@@ -809,6 +881,26 @@ const styles = StyleSheet.create({
   dateButtonText: {
     fontSize: 16,
     color: '#111827',
+  },
+  dateTimeContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  dateTimeButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    marginHorizontal: 4,
+  },
+  dateTimeButtonText: {
+    fontSize: 16,
+    color: '#111827',
+    textAlign: 'center',
   },
   modalActions: {
     flexDirection: 'row',
